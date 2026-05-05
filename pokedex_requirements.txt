@@ -1,0 +1,8 @@
+# pokedex_gen1.py runtime dependencies
+
+# Required: image rendering (sprites, silhouettes, items)
+Pillow>=10.0
+
+# Optional but recommended: TLS root CAs for PokeAPI / Showdown
+# Without it the script falls back to unverified SSL with a warning.
+certifi>=2024.0

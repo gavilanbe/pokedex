@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pokedex-national-cli"
+version = "0.1.0"
+description = "Interactive National Pokedex I-V CLI with sprites, cries, quizzes, Safari Zone, Gym Challenge, and memory game."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "Pillow>=10.0",
+    "certifi>=2024.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.setuptools]
+py-modules = [
+    "pokedex_audio",
+    "pokedex_gen1",
+    "pokedex_network",
+    "pokedex_stats",
+    "pokedex_text",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = ["test_*.py"]
