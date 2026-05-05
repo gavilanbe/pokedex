@@ -20,6 +20,7 @@ import tty
 from io import BytesIO
 
 import pokedex_audio
+import pokedex_cache
 import pokedex_network
 import pokedex_stats
 import pokedex_text
@@ -237,7 +238,6 @@ def export_trainer_card(out_path=None):
     d.text((24, y), f"Atrapados en Safari ({len(caught)}):",
            font=font_h, fill=(40, 40, 40)); y += 30
     cell_w = 68
-    cols = 10
     x = 24
     for num in caught[:30]:
         # Number below sprite
@@ -715,6 +715,17 @@ def _get(url, timeout=10):
     return pokedex_network.get_bytes(url, _ctx, timeout=timeout)
 
 
+def _get_with_retries(url, timeout=10, attempts=2, pause=0.35):
+    """Fetch bytes with a tiny retry budget for batch prefetch commands."""
+    for attempt in range(max(1, attempts)):
+        data = _get(url, timeout=timeout)
+        if data:
+            return data
+        if attempt < attempts - 1:
+            time.sleep(pause * (attempt + 1))
+    return None
+
+
 # ── Sprite ───────────────────────────────────────────────────────────────────
 
 def _gen_missingno():
@@ -941,16 +952,7 @@ def dl_sprite(name):
             d = _get(f"{_sprite_base_for_key(style_key)}/{_sn(name)}.png")
             if not d:
                 continue
-            tmp = p + ".tmp"
-            try:
-                with open(tmp, "wb") as f:
-                    f.write(d)
-                os.replace(tmp, p)
-            except OSError:
-                try:
-                    os.remove(tmp)
-                except OSError:
-                    pass
+            pokedex_cache.atomic_write_bytes(p, d)
             return Image.open(BytesIO(d)).convert("RGBA")
     return None
 
@@ -975,16 +977,7 @@ def dl_memory_icon(num):
         d = _get(f"{MEMORY_ICON_BASE}/{num}.png")
         if not d:
             return None
-        tmp = p + ".tmp"
-        try:
-            with open(tmp, "wb") as f:
-                f.write(d)
-            os.replace(tmp, p)
-        except OSError:
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
+        pokedex_cache.atomic_write_bytes(p, d)
         return Image.open(BytesIO(d)).convert("RGBA")
 
 
@@ -1354,6 +1347,31 @@ def _data_disk_cached(num):
     return num == 0 or os.path.exists(_data_path(num))
 
 
+def _cry_path(name):
+    return os.path.join(CRIES_DIR, f"{_sn(name)}.mp3")
+
+
+def _cry_disk_cached(name):
+    return os.path.exists(_cry_path(name))
+
+
+def _cache_cry(name, force=False):
+    """Ensure a Pokemon cry is cached. Returns True when available locally."""
+    os.makedirs(CRIES_DIR, exist_ok=True)
+    path = _cry_path(name)
+    if force:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    if os.path.exists(path):
+        return True
+    data = _get_with_retries(f"{CRIES_BASE}/{_sn(name)}.mp3", timeout=10)
+    if not data:
+        return False
+    return pokedex_cache.atomic_write_bytes(path, data)
+
+
 def _walk_evolution_chain(chain_link, out):
     """Recursive walk of the PokeAPI evolution chain JSON."""
     if not chain_link:
@@ -1412,16 +1430,7 @@ def fetch_data(num):
 
 def _write_data_atomic(path, data):
     """Atomic JSON write so concurrent readers never see a half-written file."""
-    tmp = path + ".tmp"
-    try:
-        with open(tmp, "w") as f:
-            json.dump(data, f, ensure_ascii=False)
-        os.replace(tmp, path)
-    except OSError:
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
+    pokedex_cache.atomic_write_json(path, data)
 
 
 def _fetch_data_full(num, seed):
@@ -1560,7 +1569,7 @@ def _geom(mx):
 
 def _heavy(inn, kind):
     l, r = ("\u250f", "\u2513") if kind == "top" else ("\u2517", "\u251b")
-    return f"{BG_DKRED}{FG_WHITE}{l}{'\u2501' * inn}{r}"
+    return f"{BG_DKRED}{FG_WHITE}{l}{'━' * inn}{r}"
 
 
 def _cas(inn, content=""):
@@ -1688,9 +1697,6 @@ def draw_list(my, mx, cursor, s_mode, s_buf, msg):
             pad_right = max(0, item_w - label_vlen - 2)
             if idx == cursor:
                 # Full-width highlight bar with inverted bg
-                text = (f"{FG_SCRTXT}▶ {BG_SCR}{FG_SCRTXT}{BOLD} {label}"
-                        f"{' ' * pad_right}{RST}{BG_SCR}")
-                # Prepend a strong green bar using FG_SCRHI on left edge
                 row_content = f" {FG_SCRHI}▎{FG_SCRTXT}{BOLD} {label}{' ' * pad_right} {FG_SCRHI}{bar_char}"
             else:
                 row_content = f"  {FG_SCRHI}{label}{' ' * pad_right} {FG_SCRHI}{bar_char}"
@@ -1845,7 +1851,7 @@ def _build_side_panel_lines(num, dname, genus, types, desc, evo_chain, stats,
     lines.append("")  # breathing
 
     # Separator
-    lines.append(f"{FG_DKGRAY}{'\u2500' * width}{FG_WHITE}")
+    lines.append(f"{FG_DKGRAY}{'─' * width}{FG_WHITE}")
 
     # Panel content
     if panel == "stats" and stats:
@@ -1922,8 +1928,8 @@ def _draw_detail_side(my, mx, num, dname, genus, desc, spr_lines, s_mode, s_buf,
     g = _detail_side_geom(my, mx)
     yo, dx, inn = g["yo"], g["dx"], g["inn"]
     body_h = g["body_h"]
-    green_w, right_w, gap = g["green_w"], g["right_w"], g["gap"]
-    gs_inner_w, gs_inner_h = g["gs_inner_w"], g["gs_inner_h"]
+    right_w, gap = g["right_w"], g["gap"]
+    gs_inner_w = g["gs_inner_w"]
     sprite_area = g["sprite_area"]
 
     # Sprite vertical positioning
@@ -1957,9 +1963,9 @@ def _draw_detail_side(my, mx, num, dname, genus, desc, spr_lines, s_mode, s_buf,
     for i in range(body_h):
         # Build left half (green screen with curved borders + interior)
         if i == 0:
-            gs_part = f"{FG_SCRHI}\u256d{'\u2500' * gs_inner_w}\u256e"
+            gs_part = f"{FG_SCRHI}\u256d{'─' * gs_inner_w}\u256e"
         elif i == body_h - 1:
-            gs_part = f"{FG_SCRHI}\u2570{'\u2500' * gs_inner_w}\u256f"
+            gs_part = f"{FG_SCRHI}\u2570{'─' * gs_inner_w}\u256f"
         else:
             interior_idx = i - 1  # 0..gs_inner_h-1
             si = interior_idx - spt
@@ -1973,7 +1979,7 @@ def _draw_detail_side(my, mx, num, dname, genus, desc, spr_lines, s_mode, s_buf,
                 shadow_w = max(4, spr_w - 2)
                 lp = max(0, (gs_inner_w - shadow_w) // 2)
                 rp = max(0, gs_inner_w - lp - shadow_w)
-                inside = f"{' ' * lp}{FG_SCRHI}{'\u2581' * shadow_w}{BG_SCR}{' ' * rp}"
+                inside = f"{' ' * lp}{FG_SCRHI}{'▁' * shadow_w}{BG_SCR}{' ' * rp}"
             else:
                 inside = f"{' ' * gs_inner_w}"
             gs_part = (f"{FG_SCRHI}\u2502{BG_SCR}{inside}"
@@ -2091,7 +2097,7 @@ def _draw_detail_stacked(my, mx, num, dname, genus, desc, spr_lines, s_mode, s_b
         spr_w = max((_vl(s) for s in spr_lines), default=0)
         shadow_w = max(4, spr_w - 2)
         lp = max(0, (sw - shadow_w) // 2)
-        shadow = f"{FG_SCRHI}{'\u2581' * shadow_w}"
+        shadow = f"{FG_SCRHI}{'▁' * shadow_w}"
         at(row, _scr_row(inn, mrg, sw, f"{' ' * lp}{shadow}"))
     else:
         at(row, _scr_row(inn, mrg, sw))
@@ -2148,7 +2154,7 @@ def _draw_detail_stacked(my, mx, num, dname, genus, desc, spr_lines, s_mode, s_b
     at(row, _cas(inn, f"{types_left}{' ' * pad}{icons_right}")); row += 1
 
     # ── Separator ──────────────────────────────────────────────────────
-    at(row, _cas(inn, f"    {FG_DKGRAY}{'\u2500' * (inn - 8)}{FG_WHITE}    ")); row += 1
+    at(row, _cas(inn, f"    {FG_DKGRAY}{'─' * (inn - 8)}{FG_WHITE}    ")); row += 1
 
     # ── Panel rows (always exactly PANEL_ROWS) ─────────────────────────
     panel_lines = []
@@ -2727,7 +2733,7 @@ def draw_safari_encounter(my, mx, spr_lines, balls, action_cursor, dname,
     # ── Grass line at the bottom of the screen ────────────────────────
     gw = min(max(16, spr_w + 8), sw - 4)
     glp = max(0, (sw - gw) // 2)
-    grass = f"{FG_SCRHI}{'\u2581' * gw}"
+    grass = f"{FG_SCRHI}{'▁' * gw}"
     at(row, _scr_row(inn, mrg, sw, f"{' ' * glp}{grass}")); row += 1
 
     at(row, _scr_brd(inn, mrg, sw, "bottom")); row += 1
@@ -2767,7 +2773,7 @@ def draw_safari_encounter(my, mx, spr_lines, balls, action_cursor, dname,
     at(row, _cas(inn, f"{types_left}{' ' * pad}{ball_right}")); row += 1
 
     # ── Separator ─────────────────────────────────────────────────────
-    at(row, _cas(inn, f"    {FG_DKGRAY}{'\u2500' * (inn - 8)}{FG_WHITE}    ")); row += 1
+    at(row, _cas(inn, f"    {FG_DKGRAY}{'─' * (inn - 8)}{FG_WHITE}    ")); row += 1
 
     # ── Status row (Furioso / Comiendo / blank) ────────────────────────
     if anger > 0:
@@ -5930,19 +5936,13 @@ def main(args=None):
                 quiz_answer = _dn(name)
 
                 # Pre-download cry file if needed
-                os.makedirs(CRIES_DIR, exist_ok=True)
-                sn = _sn(name)
-                cry_path = os.path.join(CRIES_DIR, f"{sn}.mp3")
-                if not os.path.exists(cry_path):
+                if not _cry_disk_cached(name):
                     if need_clear:
                         _clear()
                         sys.stdout.write(
                             f"\033[{my//2};{max(1,(mx-18)//2)}HCargando...")
                         sys.stdout.flush()
-                    d = _get(f"{CRIES_BASE}/{sn}.mp3")
-                    if d:
-                        with open(cry_path, "wb") as f:
-                            f.write(d)
+                    _cache_cry(name)
                     need_clear = True
 
                 # Load sprite for reveal phase
@@ -6703,6 +6703,10 @@ def _build_arg_parser():
                    help="Pick a screen palette by name (e.g. 'DMG Green', 'GBC Red')")
     p.add_argument("--prefetch", action="store_true",
                    help="Download all sprites, cries and species data, then exit")
+    p.add_argument("--prefetch-force", action="store_true",
+                   help="Re-download cached assets during --prefetch")
+    p.add_argument("--cache-status", action="store_true",
+                   help="Print offline cache coverage and prefetch failures, then exit")
     p.add_argument("--safari", action="store_true",
                    help="Jump straight into the Safari Zone")
     p.add_argument("--gym", action="store_true",
@@ -6743,56 +6747,164 @@ def _print_stats():
             print(f"    {k:18s} {v}")
 
 
-def _prefetch_all():
-    """Download every sprite, cry and species blob into the cache."""
+def _prefetch_progress_path():
+    return os.path.join(_cache_root(), "prefetch-progress.json")
+
+
+def _cache_status():
+    return pokedex_cache.cache_status(
+        POKEMON[:REAL_POKE_COUNT],
+        _sprite_disk_cached,
+        _cry_disk_cached,
+        _data_disk_cached,
+    )
+
+
+def _print_cache_status():
+    status = _cache_status()
+    print(f"Cache ({_cache_root()})")
+    print(f"  Sprites:   {status.sprites:3d} / {status.pokemon_count}")
+    print(f"  Cries:     {status.cries:3d} / {status.pokemon_count}")
+    print(f"  Data:      {status.data:3d} / {status.pokemon_count}")
+    print(f"  Total:     {status.cached_assets:3d} / {status.total_assets}")
+    if status.complete:
+        print("  Offline:   listo")
+    else:
+        print(f"  Offline:   parcial ({status.missing_assets} assets pendientes)")
+
+    progress = pokedex_cache.load_prefetch_progress(_prefetch_progress_path())
+    failed = progress.get("failed", {})
+    if failed:
+        print(f"  Fallos:    {len(failed)} registrados")
+        for key in sorted(failed)[:5]:
+            print(f"    {key}: {failed[key]}")
+        if len(failed) > 5:
+            print(f"    ... y {len(failed) - 5} mas")
+    if progress.get("updated_at"):
+        print(f"  Progreso:  {progress['updated_at']}")
+
+
+def _remove_cached_sprite(name):
+    slug = _sn(name)
+    for style_key in _sprite_style_candidates(name):
+        try:
+            os.remove(os.path.join(CACHE_DIR, style_key, f"{slug}.png"))
+        except OSError:
+            pass
+
+
+def _remove_cached_data(num):
+    try:
+        os.remove(_data_path(num))
+    except OSError:
+        pass
+
+
+def _prefetch_sprite(name, force=False):
+    if force:
+        _remove_cached_sprite(name)
+    if _sprite_disk_cached(name):
+        return True
+    return dl_sprite(name) is not None or _sprite_disk_cached(name)
+
+
+def _prefetch_cry(name, force=False):
+    return _cache_cry(name, force=force)
+
+
+def _prefetch_data(num, force=False):
+    if force:
+        _remove_cached_data(num)
+    if _data_disk_cached(num):
+        return True
+    return fetch_data(num) is not None and _data_disk_cached(num)
+
+
+def _prefetch_all(force=False):
+    """Download every sprite, cry and species blob into the cache.
+
+    The operation is resumable because cached assets are skipped on later runs,
+    and failures are written to a small progress file under the cache root.
+    """
     _load_stats()
+    status = _cache_status()
     print(f"Pre-cargando {REAL_POKE_COUNT} Pokemon...")
+    print(f"Cache inicial: {status.cached_assets}/{status.total_assets} assets")
+    if force:
+        print("Modo force: se re-descargaran los assets cacheados.")
+
+    progress_path = _prefetch_progress_path()
+    progress = pokedex_cache.load_prefetch_progress(progress_path)
+    failures = []
+    assets = (
+        ("sprite", _prefetch_sprite),
+        ("cry", _prefetch_cry),
+        ("data", _prefetch_data),
+    )
+
     for i, (num, name) in enumerate(POKEMON[:REAL_POKE_COUNT]):
         sys.stdout.write(
             f"\r  [{i+1:3d}/{REAL_POKE_COUNT}] {_dn(name):<20s}")
         sys.stdout.flush()
-        dl_sprite(name)
-        os.makedirs(CRIES_DIR, exist_ok=True)
-        sn = _sn(name)
-        cp = os.path.join(CRIES_DIR, f"{sn}.mp3")
-        if not os.path.exists(cp):
-            d = _get(f"{CRIES_BASE}/{sn}.mp3")
-            if d:
-                with open(cp, "wb") as f:
-                    f.write(d)
-        fetch_data(num)
-    print("\nListo.")
+        for asset_name, prefetcher in assets:
+            key = f"{asset_name}:{num:03d}"
+            ok = prefetcher(name if asset_name != "data" else num, force=force)
+            if ok:
+                pokedex_cache.mark_done(progress, key)
+            else:
+                failures.append(key)
+                pokedex_cache.mark_failed(progress, key, "download failed")
+        if i % 10 == 0:
+            pokedex_cache.save_prefetch_progress(progress_path, progress)
+
+    pokedex_cache.save_prefetch_progress(progress_path, progress)
+    status = _cache_status()
+    print(f"\nCache final: {status.cached_assets}/{status.total_assets} assets")
+    if failures:
+        print(
+            f"Aviso: {len(failures)} assets no se pudieron descargar. "
+            "Vuelve a ejecutar --prefetch para reintentar.")
+        return False
+    print("Listo. Cache offline completo.")
+    return True
 
 
-if __name__ == "__main__":
+def cli(argv=None):
     parser = _build_arg_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.list_palettes:
         for i, (pname, _, _, _) in enumerate(PALETTES):
             print(f"  {i}: {pname}")
-        sys.exit(0)
+        return 0
     if args.stats:
         _print_stats()
-        sys.exit(0)
+        return 0
+    if args.cache_status:
+        _print_cache_status()
+        return 0
     if args.prefetch:
-        _prefetch_all()
-        sys.exit(0)
+        return 0 if _prefetch_all(force=args.prefetch_force) else 1
     if args.trainer_card:
         path = export_trainer_card()
         if path:
             print(f"Tarjeta exportada a: {path}")
-            sys.exit(0)
+            return 0
         print("No se pudo exportar la tarjeta (Pillow o permisos de escritura).")
-        sys.exit(1)
+        return 1
 
     try:
         main(args)
+        return 0
     except KeyboardInterrupt:
-        pass
+        return 130
     finally:
         _stop_cry()
         _kill_tts()
         sys.stdout.write(f"{RST}\033[?25h\033[?1049l")
         sys.stdout.flush()
         print("Gracias por usar la Pok\u00e9dex Gen I-V!")
+
+
+if __name__ == "__main__":
+    sys.exit(cli())

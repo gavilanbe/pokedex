@@ -13,14 +13,19 @@ dependencies = [
     "certifi>=2024.0",
 ]
 
+[project.scripts]
+pokedex = "pokedex_gen1:cli"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "ruff>=0.8.0",
 ]
 
 [tool.setuptools]
 py-modules = [
     "pokedex_audio",
+    "pokedex_cache",
     "pokedex_gen1",
     "pokedex_network",
     "pokedex_stats",
@@ -30,3 +35,10 @@ py-modules = [
 [tool.pytest.ini_options]
 testpaths = ["."]
 python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E9", "F"]

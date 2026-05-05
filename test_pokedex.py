@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 import pokedex_audio
+import pokedex_cache
 import pokedex_stats
 import pokedex_text
 
@@ -256,6 +257,149 @@ def test_stats_module_normalises_gym_badges():
         len(P.SPRITE_STYLES),
     )
     assert loaded["gym_badges"] == [2]
+
+
+# ── Cache / CLI helpers ──────────────────────────────────────────────────────
+
+def test_cache_status_counts_assets():
+    pokemon = [(1, "bulbasaur"), (4, "charmander")]
+    status = pokedex_cache.cache_status(
+        pokemon,
+        sprite_cached=lambda name: name == "bulbasaur",
+        cry_cached=lambda name: True,
+        data_cached=lambda num: num == 4,
+    )
+    assert status.pokemon_count == 2
+    assert status.sprites == 1
+    assert status.cries == 2
+    assert status.data == 1
+    assert status.cached_assets == 4
+    assert status.total_assets == 6
+    assert status.missing_assets == 2
+    assert status.complete is False
+
+
+def test_prefetch_progress_roundtrip_and_failure_cleanup():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "progress.json")
+        progress = pokedex_cache.empty_progress()
+        pokedex_cache.mark_failed(progress, "cry:025", "download failed")
+        pokedex_cache.save_prefetch_progress(path, progress)
+
+        loaded = pokedex_cache.load_prefetch_progress(path)
+        assert loaded["failed"] == {"cry:025": "download failed"}
+
+        pokedex_cache.mark_done(loaded, "cry:025")
+        pokedex_cache.save_prefetch_progress(path, loaded)
+        loaded = pokedex_cache.load_prefetch_progress(path)
+        assert "cry:025" in loaded["completed"]
+        assert loaded["failed"] == {}
+
+
+def test_cli_list_palettes_returns_without_sys_exit():
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        code = P.cli(["--list-palettes"])
+    assert code == 0
+    assert "DMG Green" in buf.getvalue()
+
+
+def test_cli_delegates_interactive_args_to_main():
+    calls = []
+    original_main = P.main
+    original_stop_cry = P._stop_cry
+    original_kill_tts = P._kill_tts
+    try:
+        P.main = lambda args=None: calls.append(args)
+        P._stop_cry = lambda: None
+        P._kill_tts = lambda: None
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = P.cli(["--pokemon", "pikachu", "--no-audio"])
+    finally:
+        P.main = original_main
+        P._stop_cry = original_stop_cry
+        P._kill_tts = original_kill_tts
+
+    assert code == 0
+    assert len(calls) == 1
+    assert calls[0].pokemon == "pikachu"
+    assert calls[0].no_audio is True
+
+
+def test_print_cache_status_reports_partial_offline_cache():
+    original_cache_status = P._cache_status
+    original_progress_path = P._prefetch_progress_path
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "prefetch-progress.json")
+        pokedex_cache.save_prefetch_progress(
+            path,
+            {"completed": ["sprite:001"], "failed": {"cry:001": "download failed"}},
+        )
+        try:
+            P._cache_status = lambda: pokedex_cache.CacheStatus(
+                pokemon_count=2, sprites=1, cries=0, data=1)
+            P._prefetch_progress_path = lambda: path
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                P._print_cache_status()
+        finally:
+            P._cache_status = original_cache_status
+            P._prefetch_progress_path = original_progress_path
+
+    out = buf.getvalue()
+    assert "Offline:   parcial" in out
+    assert "cry:001" in out
+
+
+def test_prefetch_all_is_resumable_and_records_failures():
+    original_pokemon = P.POKEMON
+    original_real_count = P.REAL_POKE_COUNT
+    original_load_stats = P._load_stats
+    original_sprite_cached = P._sprite_disk_cached
+    original_cry_cached = P._cry_disk_cached
+    original_data_cached = P._data_disk_cached
+    original_sprite = P._prefetch_sprite
+    original_cry = P._prefetch_cry
+    original_data = P._prefetch_data
+    original_progress_path = P._prefetch_progress_path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            P.POKEMON = [(1, "bulbasaur")]
+            P.REAL_POKE_COUNT = 1
+            P._load_stats = lambda: None
+            P._sprite_disk_cached = lambda name: False
+            P._cry_disk_cached = lambda name: False
+            P._data_disk_cached = lambda num: False
+            P._prefetch_sprite = lambda name, force=False: True
+            P._prefetch_cry = lambda name, force=False: False
+            P._prefetch_data = lambda num, force=False: True
+            P._prefetch_progress_path = lambda: os.path.join(
+                tmp, "prefetch-progress.json")
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                ok = P._prefetch_all()
+
+            progress = pokedex_cache.load_prefetch_progress(
+                P._prefetch_progress_path())
+        finally:
+            P.POKEMON = original_pokemon
+            P.REAL_POKE_COUNT = original_real_count
+            P._load_stats = original_load_stats
+            P._sprite_disk_cached = original_sprite_cached
+            P._cry_disk_cached = original_cry_cached
+            P._data_disk_cached = original_data_cached
+            P._prefetch_sprite = original_sprite
+            P._prefetch_cry = original_cry
+            P._prefetch_data = original_data
+            P._prefetch_progress_path = original_progress_path
+
+    assert ok is False
+    assert "sprite:001" in progress["completed"]
+    assert "data:001" in progress["completed"]
+    assert progress["failed"] == {"cry:001": "download failed"}
 
 
 def test_audio_helpers_are_safe_when_nothing_is_running():
