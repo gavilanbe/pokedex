@@ -1,0 +1,6 @@
+pokedex_audio
+pokedex_cache
+pokedex_gen1
+pokedex_network
+pokedex_stats
+pokedex_text

@@ -1,0 +1,2 @@
+[console_scripts]
+pokedex = pokedex_gen1:cli

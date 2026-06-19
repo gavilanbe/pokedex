@@ -1,92 +1,78 @@
-# National Pokedex I-V CLI
+# 🔴 Pokédex Nacional CLI
 
-Interactive terminal Pokedex for Pokemon #001-#649 (Gen I-V), with sprites,
-cries, quiz modes, Safari Zone, Gym Challenge battles, memory game with large
-scrollable PC-style card icons, palettes, local cache, and a Trainer Card
-export.
+Una Pokédex interactiva para tu terminal con los Pokémon #001 al #649 (Generaciones I-V), ¡con sprites, gritos, minijuegos y mucho más! 🎮✨
 
-## Install
+## ✨ Características
+
+- 📖 Pokédex completa de las Generaciones I a V (Pokémon #001-#649).
+- 🖼️ Sprites e iconos renderizados directamente en la terminal.
+- 🔊 Gritos de los Pokémon y efectos de sonido (con opción de silenciar).
+- 🎨 Varias paletas de color que puedes ir cambiando al vuelo.
+- 🧠 Modo quiz para poner a prueba tus conocimientos Pokémon.
+- 🌿 Safari Zone para capturar Pokémon.
+- 🏆 Gym Challenge: combates contra líderes de gimnasio.
+- 🃏 Minijuego de memoria con tarjetas estilo PC desplazables.
+- 💾 Caché local de sprites, gritos y datos para jugar sin conexión.
+- 🪪 Exportación de tu Trainer Card.
+- 🔍 Búsqueda rápida de Pokémon por nombre.
+
+## 🚀 Cómo jugar / ejecutar
+
+Instala las dependencias y lanza la Pokédex:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -e ".[dev]"
+
+# Inicia la Pokédex interactiva
+python3 pokedex_gen1.py
+# o, tras instalar con pip:
+pokedex
 ```
 
-If you only want runtime dependencies:
+Si solo quieres las dependencias de ejecución:
 
 ```bash
 python3 -m pip install -r pokedex_requirements.txt
 ```
 
-## Run
+Comandos útiles:
 
 ```bash
-python3 pokedex_gen1.py
-# or, after `python3 -m pip install -e ".[dev]"`
-pokedex
+python3 pokedex_gen1.py --pokemon pikachu   # Ver un Pokémon concreto
+python3 pokedex_gen1.py --quiz              # Modo quiz
+python3 pokedex_gen1.py --safari            # Safari Zone
+python3 pokedex_gen1.py --gym               # Gym Challenge
+python3 pokedex_gen1.py --stats             # Estadísticas
+python3 pokedex_gen1.py --trainer-card      # Exportar Trainer Card
+python3 pokedex_gen1.py --cache-status      # Estado de la caché
+python3 pokedex_gen1.py --prefetch          # Precargar datos para uso offline
 ```
 
-Useful commands:
+## 🎮 Controles
 
-```bash
-python3 pokedex_gen1.py --pokemon pikachu
-python3 pokedex_gen1.py --quiz
-python3 pokedex_gen1.py --safari
-python3 pokedex_gen1.py --gym
-python3 pokedex_gen1.py --stats
-python3 pokedex_gen1.py --trainer-card
-python3 pokedex_gen1.py --cache-status
-python3 pokedex_gen1.py --prefetch
-python3 pokedex_gen1.py --prefetch --prefetch-force
-```
-
-## Controls
-
-- Arrow keys, `j`/`k`, or `w`/`s`: move through lists
-- `ENTER`: open/select/continue
-- `/`: search
-- `g`: quiz menu
+- Flechas, `j`/`k` o `w`/`s`: moverse por las listas
+- `ENTER`: abrir / seleccionar / continuar
+- `/`: buscar
+- `g`: menú de quiz
 - `h`: Safari Zone
 - `B`: Gym Challenge
-- `M`: memory game
-- `p`: cycle palette
-- `m`: mute/unmute audio
-- `T`: export Trainer Card
-- `?`: help overlay
-- `q` or `ESC`: back/quit depending on the screen
+- `M`: minijuego de memoria
+- `p`: cambiar de paleta de color
+- `m`: silenciar / activar audio
+- `T`: exportar Trainer Card
+- `?`: ayuda
+- `q` o `ESC`: volver / salir según la pantalla
 
-## Tests
+## 🛠️ Tecnología
 
-```bash
-python3 -m pytest
-python3 -m ruff check .
-```
+- 🐍 **Python 3.9+** como lenguaje principal.
+- 🖼️ **Pillow** para el renderizado de sprites e iconos.
+- 🔐 **certifi** para las conexiones TLS con PokeAPI / Showdown.
+- 🌐 Datos obtenidos de **PokeAPI** y cacheados localmente.
+- 🧪 Tests con **pytest** y linting con **ruff**.
 
-The tests focus on pure helpers and persistence so they can run without terminal
-I/O, subprocess audio, or network calls.
+## 📦 Parte de mi colección de juegos
 
-## Project Layout
-
-- `pokedex_gen1.py`: interactive CLI, rendering, modes, and compatibility facade
-- `pokedex_cache.py`: cache status, atomic writes, and resumable prefetch progress
-- `pokedex_stats.py`: stats defaults, validation, load/save helpers
-- `pokedex_text.py`: text normalization, aliases, and Pokemon search
-- `pokedex_network.py`: SSL context and HTTP byte fetches
-- `pokedex_audio.py`: sound effects, cries, and TTS process management
-
-## Local Data
-
-Sprites, cries, PokeAPI data, and stats are cached under the platform cache
-directory. On macOS this is:
-
-```text
-~/Library/Caches/pokedex
-```
-
-Memory game card icons are cached under `memory-icons/bwicons` in that same
-folder.
-
-`--prefetch` skips already-cached files, records failed assets in
-`prefetch-progress.json`, and can be rerun later to continue filling the cache.
-Use `--cache-status` to see whether the app is ready for full offline use.
+Este es uno de mis juegos hobby. ¡Echa un vistazo a mis otros proyectos en mi perfil de GitHub! 🚀

@@ -1,0 +1,14 @@
+README.md
+pokedex_audio.py
+pokedex_cache.py
+pokedex_gen1.py
+pokedex_network.py
+pokedex_stats.py
+pokedex_text.py
+pyproject.toml
+pokedex_national_cli.egg-info/PKG-INFO
+pokedex_national_cli.egg-info/SOURCES.txt
+pokedex_national_cli.egg-info/dependency_links.txt
+pokedex_national_cli.egg-info/entry_points.txt
+pokedex_national_cli.egg-info/requires.txt
+pokedex_national_cli.egg-info/top_level.txt
