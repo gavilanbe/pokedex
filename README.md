@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/screenshots/pokedex.png" alt="Pokédex Nacional CLI en la terminal" width="720">
+<img src="docs/screenshots/01-title.png" alt="Detalle de Charizard renderizado en la Pokédex Nacional CLI" width="720">
 
 # 🔴 Pokédex Nacional CLI
 
@@ -46,6 +46,16 @@ Una Pokédex Nacional completa que vive en tu terminal. Recorre la lista de los 
 | `T` | Exportar Trainer Card |
 | `?` | Ayuda |
 | `q` / `ESC` | Volver / salir |
+
+## 📸 Capturas
+
+| 📖 La lista nacional (#001–649) | ✨ Modo shiny |
+|:--:|:--:|
+| ![Lista de la Pokédex Nacional en la terminal](docs/screenshots/02-list.png) | ![Gengar shiny renderizado en la terminal](docs/screenshots/03-shiny.png) |
+| 🧠 ¿Quién es ese Pokémon? | 🌿 Safari Zone |
+| ![Quiz de siluetas: ¿quién es ese Pokémon?](docs/screenshots/04-quiz.png) | ![Encuentro con un Larvitar salvaje en la Safari Zone](docs/screenshots/05-safari.png) |
+
+> Cada Pokémon se renderiza a color directamente en la terminal a partir de su sprite (vía Pillow).
 
 ## 🚀 Cómo ejecutar
 
